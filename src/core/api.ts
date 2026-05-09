@@ -27,7 +27,7 @@ export interface SettingsPatch {
   theme?: string;
   consent?: boolean;
   address_as?: string;
-  tone_style?: 'warm' | 'calm' | 'quiet';
+  tone_style?: 'warm' | 'professional' | 'gentle';
   background?: 'weather' | 'starry' | 'seaside' | 'dawn';
   llm?: {
     chat?: { endpoint?: string; model?: string; apiKey?: string };

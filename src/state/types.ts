@@ -4,7 +4,7 @@ export type Role = 'user' | 'admin';
 export type CrisisLevel = 'none' | 'monitor' | 'medium' | 'high';
 export type WeatherKey = 'sunny' | 'partlyCloudy' | 'cloudy' | 'rainy' | 'stormy';
 
-export type ToneStyle = 'warm' | 'calm' | 'quiet';
+export type ToneStyle = 'warm' | 'professional' | 'gentle';
 export type BackgroundKey = 'weather' | 'starry' | 'seaside' | 'dawn';
 
 export interface User {

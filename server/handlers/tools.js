@@ -41,6 +41,7 @@ export async function handleDecouple(request, env, user) {
     const reply = await callChat(env, user.id, llmMessages, { maxTokens: 200 });
     return json({ reply, step, finished: step >= 4 });
   } catch (e) {
+    console.error('decouple callChat failed:', e?.message, e?.stack);
     return json({ error: (e && e.message) || '暂时说不出话', reply: null }, 503);
   }
 }

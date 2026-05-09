@@ -14,9 +14,9 @@ interface SlotForm {
 const emptySlot = (): SlotForm => ({ endpoint: '', model: '', apiKey: '', clearKey: false });
 
 const TONE_LABELS: Record<ToneStyle, { label: string; desc: string }> = {
-  warm: { label: '温暖朋友', desc: '主动回应，多共情，像坐在你身边' },
-  calm: { label: '冷静朋友', desc: '安静倾听，只在关键处说话' },
-  quiet: { label: '少说话多陪着', desc: '主要是"嗯"、"我在"、偶尔一句话' },
+  warm: { label: '温暖', desc: '主动、丰富的共情，每句都紧紧接住你' },
+  professional: { label: '专业咨询师', desc: '像资深咨询师一样疏理：情绪命名、矛盾反射、温和提问' },
+  gentle: { label: '轻柔', desc: '话不多但每句都有分量，不会只说"嗯"' },
 };
 
 const BG_LABELS: Record<BackgroundKey, string> = {

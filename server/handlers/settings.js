@@ -75,7 +75,7 @@ export async function handleUpdateSettings(request, env, user) {
     const v = body.address_as.trim().slice(0, 20);
     await d.run('UPDATE users SET address_as = ? WHERE id = ?', v || null, user.id);
   }
-  if (body.tone_style && ['warm', 'calm', 'quiet'].includes(body.tone_style)) {
+  if (body.tone_style && ['warm', 'professional', 'gentle', 'calm', 'quiet'].includes(body.tone_style)) {
     await d.run('UPDATE users SET tone_style = ? WHERE id = ?', body.tone_style, user.id);
   }
   if (body.background && ['weather', 'starry', 'seaside', 'dawn'].includes(body.background)) {
