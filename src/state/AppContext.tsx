@@ -8,6 +8,7 @@ interface AppContextValue {
   loading: boolean;
   theme: ThemeKey;
   setTheme: (t: ThemeKey) => void;
+  patchUser: (patch: Record<string, unknown>) => Promise<void>;
   login: (code: string, nickname?: string) => Promise<void>;
   logout: () => void;
   refreshMe: () => Promise<void>;
@@ -72,8 +73,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (user) api.updateSettings({ theme: t }).catch(() => {});
   };
 
+  const patchUser = async (patch: Record<string, unknown>) => {
+    await api.updateSettings(patch);
+    await refreshMe();
+  };
+
   const value = useMemo<AppContextValue>(() => ({
-    user, loading, theme, setTheme, login, logout, refreshMe,
+    user, loading, theme, setTheme, patchUser, login, logout, refreshMe,
   }), [user, loading, theme]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

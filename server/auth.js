@@ -32,7 +32,7 @@ export async function loginWithInvite(env, code, nickname) {
     token, userId, now(), now() + SESSION_TTL_MS,
   );
 
-  const user = await d.first('SELECT id, nickname, role, theme, consent_at FROM users WHERE id = ?', userId);
+  const user = await d.first('SELECT id, nickname, role, theme, consent_at, address_as, tone_style, background FROM users WHERE id = ?', userId);
   return { token, user };
 }
 
@@ -45,7 +45,7 @@ export async function verifyToken(env, token) {
     await d.run('DELETE FROM sessions WHERE token = ?', token);
     return null;
   }
-  const user = await d.first('SELECT id, nickname, role, theme, consent_at FROM users WHERE id = ?', s.user_id);
+  const user = await d.first('SELECT id, nickname, role, theme, consent_at, address_as, tone_style, background FROM users WHERE id = ?', s.user_id);
   return user || null;
 }
 

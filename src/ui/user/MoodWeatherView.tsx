@@ -1,12 +1,18 @@
+import { useApp } from '../../state/AppContext.tsx';
 import { useMoodWeather } from '../../modules/mood-weather/useMoodWeather.ts';
 import WeatherBackground from '../../modules/mood-weather/WeatherBackground.tsx';
 
 export default function MoodWeatherView() {
+  const { user } = useApp();
   const { mood } = useMoodWeather();
 
   return (
     <>
-      <WeatherBackground weather={mood?.current?.weather ?? null} wind={mood?.current?.wind ?? 0} />
+      <WeatherBackground
+        weather={mood?.current?.weather ?? null}
+        wind={mood?.current?.wind ?? 0}
+        background={user?.background || 'weather'}
+      />
       <div className="mood-view">
         <h2>你最近的心情地图</h2>
 

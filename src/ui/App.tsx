@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppContext.tsx';
 import InviteCodeLogin from './auth/InviteCodeLogin.tsx';
+import ConsentGate from '../modules/onboarding/ConsentGate.tsx';
 import HomeLayout from './user/HomeLayout.tsx';
 import ChatView from './chat/ChatView.tsx';
 import MoodWeatherView from './user/MoodWeatherView.tsx';
+import MemoryView from './user/MemoryView.tsx';
+import ToolsHub from './user/ToolsHub.tsx';
+import DecoupleView from './user/DecoupleView.tsx';
+import BreathingView from './user/BreathingView.tsx';
+import LettersView from './user/LettersView.tsx';
+import SavedView from './user/SavedView.tsx';
 import SettingsView from './user/SettingsView.tsx';
 import AdminLayout from './admin/AdminLayout.tsx';
 import UserListView from './admin/UserListView.tsx';
@@ -32,6 +39,8 @@ export default function App() {
 
   if (loading) return <div className="splash">…</div>;
   if (!user) return <InviteCodeLogin />;
+  // 管理员不走同意流程，普通用户首次登录必须过
+  if (user.role === 'user' && !user.consent_at) return <ConsentGate />;
 
   // 管理员路由
   if (path.startsWith('/admin')) {
@@ -51,6 +60,12 @@ export default function App() {
     <HomeLayout path={path}>
       {path === '/' || path === '' ? <ChatView /> :
        path === '/me/mood' ? <MoodWeatherView /> :
+       path === '/me/memory' ? <MemoryView /> :
+       path === '/me/tools' ? <ToolsHub /> :
+       path === '/me/tools/decouple' ? <DecoupleView /> :
+       path === '/me/tools/breathing' ? <BreathingView /> :
+       path === '/me/letters' ? <LettersView /> :
+       path === '/me/saved' ? <SavedView /> :
        path === '/me/settings' ? <SettingsView /> :
        <ChatView />}
     </HomeLayout>

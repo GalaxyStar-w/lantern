@@ -1,14 +1,19 @@
 // 聊天主入口
-// 写入 user 消息 + 规则打标 + 危机落库 → 调用 LLM 获取回复 → 写入 assistant 消息
-// 阶段 2：已接入真实 LLM（OpenAI-compatible）。若 LLM 未配置或调用失败，降级到 mock 回复。
+// 流程：入库 user 消息（含规则打标 + 危机落库 + 重要时刻记录）
+//      → 构建记忆上下文 + 个性化 + 危机
+//      → 调 LLM（失败降级 mock）
+//      → 入库 assistant 消息
+//      → 更新 last_seen_at
 
 import { db, now, randomId } from '../d1.js';
 import { classifyMessage } from '../assessor/classify.js';
 import { callChat } from '../llm.js';
 import { buildSystemPrompt } from '../systemPrompt.js';
+import { buildMemoryContext, getDaysSinceLastSeen, updateLastSeen } from '../memory/retriever.js';
+import { maybeRecordMoment } from '../memory/momentDetector.js';
 import { json } from '../utils.js';
 
-const CONTEXT_WINDOW = 20; // 给 LLM 的近 N 条消息
+const CONTEXT_WINDOW = 20;
 
 async function getOrCreateConversation(env, userId) {
   const d = db(env);
@@ -26,7 +31,6 @@ async function getOrCreateConversation(env, userId) {
   return id;
 }
 
-// 降级回复（LLM 不可用时）
 function mockReply(text, crisis) {
   if (crisis === 'high') {
     return '谢谢你愿意把这么重的话告诉我。我在这里。现在所在的地方安全吗？如果可以，先拨 400-161-9995，那边 24 小时都有人接。';
@@ -40,7 +44,9 @@ function mockReply(text, crisis) {
 async function loadRecentContext(env, conversationId, limit) {
   const d = db(env);
   const rows = await d.all(
-    'SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?',
+    `SELECT role, content FROM messages
+     WHERE conversation_id = ? AND (deleted IS NULL OR deleted = 0)
+     ORDER BY created_at DESC LIMIT ?`,
     conversationId, limit,
   );
   return rows.reverse().map((m) => ({ role: m.role, content: m.content }));
@@ -51,31 +57,67 @@ export async function handleChat(request, env, user) {
   const text = (body.text || '').toString().trim();
   if (!text) return json({ error: '说点什么都可以' }, 400);
 
+  const silent = body.silent === true;    // 日记模式：只写不回
+  const ephemeral = body.ephemeral === true; // 临时模式：不入评估/记忆
+
   const d = db(env);
   const conversationId = await getOrCreateConversation(env, user.id);
   const t = now();
 
   const { rule_tags, crisis_level, matched } = classifyMessage(text);
+  // 临时模式不打标
+  const effectiveRuleTags = ephemeral ? null : rule_tags;
+  const effectiveCrisis = ephemeral ? 'none' : crisis_level;
 
   const userMsgId = randomId();
   await d.run(
-    'INSERT INTO messages (id, conversation_id, user_id, role, content, created_at, rule_tags, crisis_level) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    userMsgId, conversationId, user.id, 'user', text, t, rule_tags, crisis_level,
+    `INSERT INTO messages
+     (id, conversation_id, user_id, role, content, created_at, rule_tags, crisis_level, ephemeral, silent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    userMsgId, conversationId, user.id, 'user', text, t,
+    effectiveRuleTags, effectiveCrisis,
+    ephemeral ? 1 : 0, silent ? 1 : 0,
   );
 
-  if (crisis_level === 'high' || crisis_level === 'medium') {
+  if (!ephemeral && (crisis_level === 'high' || crisis_level === 'medium')) {
     await d.run(
       'INSERT INTO crisis_events (id, user_id, message_id, level, matched_keywords, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       randomId(), user.id, userMsgId, crisis_level, JSON.stringify(matched), t,
     );
   }
 
-  // 调用真实 LLM；失败则降级 mock
+  if (!ephemeral) {
+    await maybeRecordMoment(env, { userId: user.id, messageId: userMsgId, content: text, crisis_level });
+  }
+
+  // 日记模式：只落库，返回占位
+  if (silent) {
+    await d.run('UPDATE conversations SET last_msg_at = ? WHERE id = ?', now(), conversationId);
+    await updateLastSeen(env, user.id);
+    return json({
+      conversationId,
+      userMessage: { id: userMsgId, role: 'user', content: text, created_at: t, crisis_level: effectiveCrisis },
+      reply: null,
+      silent: true,
+    });
+  }
+
+  // 调 LLM
   let reply;
   let llmError = null;
   try {
     const history = await loadRecentContext(env, conversationId, CONTEXT_WINDOW);
-    const systemPrompt = buildSystemPrompt({ crisisLevel: crisis_level });
+    const memoryCtx = ephemeral ? '' : await buildMemoryContext(env, user.id);
+    const daysAway = await getDaysSinceLastSeen(env, user.id);
+
+    const systemPrompt = buildSystemPrompt({
+      crisisLevel: crisis_level,
+      memoryContext: memoryCtx,
+      addressAs: user.address_as,
+      nickname: user.nickname,
+      toneStyle: user.tone_style || 'warm',
+      daysAway,
+    });
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
     reply = await callChat(env, user.id, messages);
   } catch (e) {
@@ -89,13 +131,54 @@ export async function handleChat(request, env, user) {
     assistantMsgId, conversationId, user.id, 'assistant', reply, now(),
   );
   await d.run('UPDATE conversations SET last_msg_at = ? WHERE id = ?', now(), conversationId);
+  await updateLastSeen(env, user.id);
 
   return json({
     conversationId,
-    userMessage: { id: userMsgId, role: 'user', content: text, created_at: t, crisis_level },
+    userMessage: { id: userMsgId, role: 'user', content: text, created_at: t, crisis_level: effectiveCrisis },
     reply: { id: assistantMsgId, role: 'assistant', content: reply, created_at: now() },
     llmError,
   });
+}
+
+// 主动打招呼：会话空 or 距上次 >3 天，返回一个 opener（仅 AI 消息，不入库，由前端决定要不要显示）
+export async function handleOpener(_request, env, user) {
+  const d = db(env);
+  const last = await d.first(
+    'SELECT created_at, role FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+    user.id,
+  );
+  const daysAway = await getDaysSinceLastSeen(env, user.id);
+
+  let opener = null;
+  if (!last) {
+    // 全新用户
+    const name = user.address_as || user.nickname || '';
+    opener = name ? `${name}，慢慢来。今天是哪种天气呢？` : '慢慢来。今天是哪种天气呢？';
+  } else if (daysAway != null && daysAway >= 3) {
+    // 久别再见
+    const memoryCtx = await buildMemoryContext(env, user.id);
+    try {
+      const systemPrompt = buildSystemPrompt({
+        crisisLevel: 'none',
+        memoryContext: memoryCtx,
+        addressAs: user.address_as,
+        nickname: user.nickname,
+        toneStyle: user.tone_style || 'warm',
+        daysAway,
+        reunionMode: true,
+      });
+      opener = await callChat(env, user.id, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `[系统] TA ${daysAway} 天没来过了，现在又回来了。你说一句自然的开场，不要问太多，2 句话内，让 TA 舒服地打开话匣子。` },
+      ], { maxTokens: 120 });
+    } catch {
+      opener = `有一阵子没见到你了。${daysAway} 天。最近怎么样？`;
+    }
+  }
+
+  if (opener) await updateLastSeen(env, user.id);
+  return json({ opener, daysAway });
 }
 
 export async function handleListMessages(_request, env, user) {
@@ -106,8 +189,23 @@ export async function handleListMessages(_request, env, user) {
   );
   if (!conv) return json({ conversationId: null, messages: [] });
   const rows = await d.all(
-    'SELECT id, role, content, created_at, crisis_level FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 200',
+    `SELECT id, role, content, created_at, crisis_level, silent
+     FROM messages
+     WHERE conversation_id = ? AND (deleted IS NULL OR deleted = 0)
+     ORDER BY created_at ASC LIMIT 200`,
     conv.id,
   );
   return json({ conversationId: conv.id, messages: rows });
+}
+
+export async function handleDeleteMessage(_request, env, user, pathParams) {
+  const { messageId } = pathParams;
+  const d = db(env);
+  // 软删：置 deleted = 1
+  await d.run(
+    'UPDATE messages SET deleted = 1 WHERE id = ? AND user_id = ?',
+    messageId, user.id,
+  );
+  // 同步撤掉相关的 rule_tags / crisis 影响：不做，影响很小且会让代码复杂
+  return json({ ok: true });
 }

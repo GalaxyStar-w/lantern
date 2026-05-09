@@ -4,12 +4,18 @@ export type Role = 'user' | 'admin';
 export type CrisisLevel = 'none' | 'monitor' | 'medium' | 'high';
 export type WeatherKey = 'sunny' | 'partlyCloudy' | 'cloudy' | 'rainy' | 'stormy';
 
+export type ToneStyle = 'warm' | 'calm' | 'quiet';
+export type BackgroundKey = 'weather' | 'starry' | 'seaside' | 'dawn';
+
 export interface User {
   id: string;
   nickname: string;
   role: Role;
   theme?: ThemeKey;
   consent_at?: number | null;
+  address_as?: string | null;
+  tone_style?: ToneStyle;
+  background?: BackgroundKey;
 }
 
 export interface Message {

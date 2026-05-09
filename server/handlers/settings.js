@@ -71,6 +71,16 @@ export async function handleUpdateSettings(request, env, user) {
   if (body.consent === true && !user.consent_at) {
     await d.run('UPDATE users SET consent_at = ? WHERE id = ?', now(), user.id);
   }
+  if (typeof body.address_as === 'string') {
+    const v = body.address_as.trim().slice(0, 20);
+    await d.run('UPDATE users SET address_as = ? WHERE id = ?', v || null, user.id);
+  }
+  if (body.tone_style && ['warm', 'calm', 'quiet'].includes(body.tone_style)) {
+    await d.run('UPDATE users SET tone_style = ? WHERE id = ?', body.tone_style, user.id);
+  }
+  if (body.background && ['weather', 'starry', 'seaside', 'dawn'].includes(body.background)) {
+    await d.run('UPDATE users SET background = ? WHERE id = ?', body.background, user.id);
+  }
 
   if (body.llm) {
     await upsertLLMConfig(env, user.id, body.llm);

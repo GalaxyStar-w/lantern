@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useApp } from '../../state/AppContext.tsx';
 import type { ThemeKey } from '../../core/theme.ts';
+import type { BackgroundKey, ToneStyle } from '../../state/types.ts';
 import { api, type SettingsResponse } from '../../core/api.ts';
 
 interface SlotForm {
@@ -12,8 +13,23 @@ interface SlotForm {
 
 const emptySlot = (): SlotForm => ({ endpoint: '', model: '', apiKey: '', clearKey: false });
 
+const TONE_LABELS: Record<ToneStyle, { label: string; desc: string }> = {
+  warm: { label: '温暖朋友', desc: '主动回应，多共情，像坐在你身边' },
+  calm: { label: '冷静朋友', desc: '安静倾听，只在关键处说话' },
+  quiet: { label: '少说话多陪着', desc: '主要是"嗯"、"我在"、偶尔一句话' },
+};
+
+const BG_LABELS: Record<BackgroundKey, string> = {
+  weather: '跟着心情变（推荐）',
+  starry: '星夜',
+  seaside: '海边',
+  dawn: '晨光',
+};
+
 export default function SettingsView() {
-  const { user, theme, setTheme, logout } = useApp();
+  const { user, theme, setTheme, patchUser, logout } = useApp();
+  const [addressInput, setAddressInput] = useState(user?.address_as || '');
+  const [savingPrefs, setSavingPrefs] = useState(false);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [chatForm, setChatForm] = useState<SlotForm>(emptySlot());
   const [assessForm, setAssessForm] = useState<SlotForm>(emptySlot());
@@ -185,6 +201,60 @@ export default function SettingsView() {
         </div>
       </section>
 
+      <section>
+        <h3>AI 怎么叫你</h3>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            placeholder={user?.nickname ? `（留空会叫你 ${user.nickname}）` : '怎么叫都行，留空也可以'}
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value)}
+            maxLength={20}
+          />
+          <button
+            disabled={savingPrefs || addressInput === (user?.address_as || '')}
+            onClick={async () => {
+              setSavingPrefs(true);
+              try { await patchUser({ address_as: addressInput.trim() }); }
+              finally { setSavingPrefs(false); }
+            }}
+          >保存</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>AI 的语气</h3>
+        <div className="theme-picker" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+          {(Object.keys(TONE_LABELS) as ToneStyle[]).map((k) => (
+            <button
+              key={k}
+              className={(user?.tone_style || 'warm') === k ? 'active' : ''}
+              onClick={() => patchUser({ tone_style: k })}
+              style={{ textAlign: 'left', padding: '0.7rem 1rem' }}
+            >
+              <div>{TONE_LABELS[k].label}</div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>
+                {TONE_LABELS[k].desc}
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h3>背景</h3>
+        <div className="theme-picker" style={{ flexWrap: 'wrap' }}>
+          {(Object.keys(BG_LABELS) as BackgroundKey[]).map((k) => (
+            <button
+              key={k}
+              className={(user?.background || 'weather') === k ? 'active' : ''}
+              onClick={() => patchUser({ background: k })}
+            >
+              {BG_LABELS[k]}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {settings && (
         <section>
           <h3>AI 配置（OpenAI 兼容）</h3>
@@ -201,6 +271,41 @@ export default function SettingsView() {
           </div>
         </section>
       )}
+
+      <section>
+        <h3>你的数据</h3>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <a
+            href="/api/me/export"
+            download
+            onClick={(e) => {
+              const token = localStorage.getItem('lantern.token');
+              if (!token) return;
+              e.preventDefault();
+              fetch('/api/me/export', { headers: { Authorization: `Bearer ${token}` } })
+                .then((r) => r.blob())
+                .then((b) => {
+                  const url = URL.createObjectURL(b);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `lantern-${user?.nickname || 'data'}-${new Date().toISOString().slice(0, 10)}.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                });
+            }}
+            style={{
+              padding: '0.5rem 1.1rem',
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              display: 'inline-block',
+              color: 'var(--text)',
+            }}
+          >导出我的数据</a>
+        </div>
+        <p style={{ color: 'var(--text-dim)', fontSize: '0.82rem', marginTop: 8 }}>
+          包含全部聊天、评估、收藏、信件，一个 JSON 文件，下载到本地。
+        </p>
+      </section>
 
       <section>
         <h3>账号</h3>

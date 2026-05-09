@@ -26,6 +26,9 @@ export interface SettingsResponse {
 export interface SettingsPatch {
   theme?: string;
   consent?: boolean;
+  address_as?: string;
+  tone_style?: 'warm' | 'calm' | 'quiet';
+  background?: 'weather' | 'starry' | 'seaside' | 'dawn';
   llm?: {
     chat?: { endpoint?: string; model?: string; apiKey?: string };
     assess?: { endpoint?: string; model?: string; apiKey?: string };
@@ -69,10 +72,31 @@ export const api = {
     }),
   me: () => apiFetch<{ user: unknown }>('/api/me'),
   listMessages: () => apiFetch<{ conversationId: string | null; messages: unknown[] }>('/api/messages'),
-  chat: (text: string) => apiFetch<{ userMessage: unknown; reply: unknown }>('/api/chat', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
+  chat: (text: string, opts: { silent?: boolean; ephemeral?: boolean } = {}) =>
+    apiFetch<{ userMessage: unknown; reply: unknown | null; silent?: boolean }>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ text, ...opts }),
+    }),
+  opener: () => apiFetch<{ opener: string | null; daysAway: number | null }>('/api/chat/opener'),
+  deleteMessage: (id: string) => apiFetch<{ ok: boolean }>(`/api/messages/${id}`, { method: 'DELETE' }),
+  myMemory: () => apiFetch<{ profile: unknown; moments: Array<{ id: string; tag: string; summary: string; created_at: number }> }>('/api/me/memory'),
+  deleteMoment: (id: string) => apiFetch<{ ok: boolean }>(`/api/me/memory/moments/${id}`, { method: 'DELETE' }),
+  forgetProfile: () => apiFetch<{ ok: boolean }>('/api/me/memory/forget', { method: 'POST' }),
+  saveMessage: (messageId: string) => apiFetch<{ id: string; duplicate?: boolean }>('/api/me/saved', {
+    method: 'POST', body: JSON.stringify({ messageId }),
   }),
+  listSaved: () => apiFetch<{ saved: Array<{ id: string; message_id: string; content: string; created_at: number }> }>('/api/me/saved'),
+  deleteSaved: (id: string) => apiFetch<{ ok: boolean }>(`/api/me/saved/${id}`, { method: 'DELETE' }),
+  decouple: (step: number, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+    apiFetch<{ reply: string | null; step: number; finished: boolean; error?: string }>('/api/tools/decouple', {
+      method: 'POST', body: JSON.stringify({ step, messages }),
+    }),
+  listLetters: () => apiFetch<{ letters: Array<{ id: string; content: string; created_at: number; deliver_at: number; delivered: number; read_at: number | null }> }>('/api/tools/letters'),
+  createLetter: (content: string, deliverAt: number) =>
+    apiFetch<{ id: string }>('/api/tools/letters', { method: 'POST', body: JSON.stringify({ content, deliverAt }) }),
+  readLetter: (id: string) => apiFetch<{ letter: { id: string; content: string; created_at: number; deliver_at: number; read_at: number | null } }>(`/api/tools/letters/${id}`),
+  pendingLetter: () => apiFetch<{ pendingLetterId: string | null }>('/api/tools/letters/pending'),
+  deleteLetter: (id: string) => apiFetch<{ ok: boolean }>(`/api/tools/letters/${id}`, { method: 'DELETE' }),
   mood: () => apiFetch<unknown>('/api/me/mood'),
   getSettings: () => apiFetch<SettingsResponse>('/api/user/settings'),
   updateSettings: (patch: SettingsPatch) => apiFetch<SettingsResponse>('/api/user/settings', {
