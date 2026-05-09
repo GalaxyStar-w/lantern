@@ -9,9 +9,18 @@
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
-  opacity: 0.7;
   transition: opacity 1.5s ease, filter 1.5s ease;
   --wind-intensity: 1;
+}
+
+/* 晴/多云/阴 自带深底色渐变（沿用夜色主题），::before/::after 是光斑叠加 */
+.weather-sunny, .weather-partlyCloudy, .weather-cloudy {
+  background: linear-gradient(160deg, var(--bg-from), var(--bg-to));
+}
+html[data-theme='cream-warm'] .weather-sunny,
+html[data-theme='cream-warm'] .weather-partlyCloudy,
+html[data-theme='cream-warm'] .weather-cloudy {
+  background: linear-gradient(160deg, #F5EFE6, #EFE7D6);
 }
 
 .weather-bg::before,

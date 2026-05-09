@@ -35,11 +35,15 @@ export default function DecoupleView() {
       const r = await api.decouple(step, next);
       if (r.reply) {
         setMessages([...next, { role: 'assistant', content: r.reply }]);
+      } else if (r.error) {
+        setMessages([...next, { role: 'assistant', content: `（出错了：${r.error}）` }]);
       }
       if (r.finished) setFinished(true);
       else setStep((s) => Math.min(4, s + 1));
     } catch (e) {
-      setMessages([...next, { role: 'assistant', content: '（一时说不出话，再试一次？）' }]);
+      const msg = (e as Error).message || '未知错误';
+      console.error('decouple error', e);
+      setMessages([...next, { role: 'assistant', content: `（${msg}）` }]);
     } finally {
       setSending(false);
     }

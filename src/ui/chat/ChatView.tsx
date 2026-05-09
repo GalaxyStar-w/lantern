@@ -1,16 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../core/api.ts';
 import { detectCrisis } from '../../core/crisis.ts';
-import { useApp } from '../../state/AppContext.tsx';
 import type { Message } from '../../state/types.ts';
 import MessageBubble from './MessageBubble.tsx';
 import Composer from './Composer.tsx';
 import CrisisBanner from './CrisisBanner.tsx';
-import WeatherBackground from '../../modules/mood-weather/WeatherBackground.tsx';
 import { useMoodWeather } from '../../modules/mood-weather/useMoodWeather.ts';
 
 export default function ChatView() {
-  const { user } = useApp();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCrisis, setShowCrisis] = useState(false);
@@ -18,7 +15,7 @@ export default function ChatView() {
   const [pendingLetterId, setPendingLetterId] = useState<string | null>(null);
   const [milestonePhrase, setMilestonePhrase] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { mood, refresh: refreshMood } = useMoodWeather();
+  const { refresh: refreshMood } = useMoodWeather();
 
   useEffect(() => {
     (async () => {
@@ -133,11 +130,6 @@ export default function ChatView() {
 
   return (
     <>
-      <WeatherBackground
-        weather={mood?.current?.weather ?? null}
-        wind={mood?.current?.wind ?? 0}
-        background={user?.background || 'weather'}
-      />
       <div className="chat">
         <div className="chat-scroll" ref={scrollRef}>
           {loading ? (

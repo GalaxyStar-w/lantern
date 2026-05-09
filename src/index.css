@@ -36,8 +36,7 @@ html, body, #root {
 
 body {
   color: var(--text);
-  background: linear-gradient(160deg, var(--bg-from), var(--bg-to));
-  background-attachment: fixed;
+  background: var(--bg-from);
   transition: background 1s ease;
 }
 

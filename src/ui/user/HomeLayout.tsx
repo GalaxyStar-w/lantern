@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useApp } from '../../state/AppContext.tsx';
+import { useMoodWeather } from '../../modules/mood-weather/useMoodWeather.ts';
+import WeatherBackground from '../../modules/mood-weather/WeatherBackground.tsx';
 
 function NavLink({ to, active, children }: { to: string; active: boolean; children: ReactNode }) {
   return <a href={`#${to}`} className={active ? 'active' : ''}>{children}</a>;
@@ -7,8 +9,14 @@ function NavLink({ to, active, children }: { to: string; active: boolean; childr
 
 export default function HomeLayout({ path, children }: { path: string; children: ReactNode }) {
   const { user } = useApp();
+  const { mood } = useMoodWeather();
   return (
     <div className="home-layout">
+      <WeatherBackground
+        weather={mood?.current?.weather ?? null}
+        wind={mood?.current?.wind ?? 0}
+        background={user?.background || 'weather'}
+      />
       <header className="app-header">
         <span className="brand">LANTERN</span>
         <nav>
