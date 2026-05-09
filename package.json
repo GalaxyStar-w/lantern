@@ -13,8 +13,9 @@
     "deploy": "npm run build && npm run stage && wrangler pages deploy dist --project-name=lantern --branch=main --commit-dirty=true",
     "deploy:server": "cd server && wrangler deploy",
     "deploy:all": "npm run deploy:server && npm run deploy",
-    "d1:migrate": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --remote && wrangler d1 execute lantern-db --file=./migrations/0002_extensions.sql --remote",
-    "d1:migrate:local": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --local && wrangler d1 execute lantern-db --file=./migrations/0002_extensions.sql --local",
+    "d1:migrate": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --remote && wrangler d1 execute lantern-db --file=./migrations/0002_extensions.sql --remote && wrangler d1 execute lantern-db --file=./migrations/0003_tone_refactor.sql --remote",
+    "d1:migrate:local": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --local && wrangler d1 execute lantern-db --file=./migrations/0002_extensions.sql --local && wrangler d1 execute lantern-db --file=./migrations/0003_tone_refactor.sql --local",
+    "d1:migrate:local:0003": "cd server && wrangler d1 execute lantern-db --file=./migrations/0003_tone_refactor.sql --local",
     "d1:seed": "cd server && wrangler d1 execute lantern-db --file=../scripts/seed-d1.sql --remote",
     "d1:seed:local": "cd server && wrangler d1 execute lantern-db --file=../scripts/seed-d1.sql --local",
     "smoke": "node scripts/smoke-assessor.mjs"
