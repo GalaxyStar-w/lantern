@@ -8,9 +8,11 @@
 }
 
 .home-layout, .admin-layout {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .app-header {
@@ -20,6 +22,12 @@
   justify-content: space-between;
   font-size: 0.9rem;
   color: var(--text-dim);
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg-from) 70%, transparent);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
 }
 .app-header .brand {
   display: flex;
@@ -53,6 +61,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow-y: auto;
 }
 
 /* 登录 */
@@ -90,7 +99,7 @@
 
 /* 聊天 */
 .chat {
-  flex: 1;
+  height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -749,6 +758,11 @@
   display: flex;
   gap: 1rem;
   align-items: center;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg-from) 70%, transparent);
+  flex: 0 0 auto;
 }
 .admin-layout .admin-header nav {
   display: flex;

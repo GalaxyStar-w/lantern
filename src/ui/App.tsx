@@ -56,18 +56,25 @@ export default function App() {
   }
 
   // 用户路由
+  // ChatView 始终挂载（保住进行中的流式对话），其他页面按需渲染在其之上
+  const isChatPath = path === '/' || path === '' || (!path.startsWith('/me/') && !path.startsWith('/admin'));
+  const overlay =
+    path === '/me/mood' ? <MoodWeatherView /> :
+    path === '/me/memory' ? <MemoryView /> :
+    path === '/me/tools' ? <ToolsHub /> :
+    path === '/me/tools/decouple' ? <DecoupleView /> :
+    path === '/me/tools/breathing' ? <BreathingView /> :
+    path === '/me/letters' ? <LettersView /> :
+    path === '/me/saved' ? <SavedView /> :
+    path === '/me/settings' ? <SettingsView /> :
+    null;
+
   return (
     <HomeLayout path={path}>
-      {path === '/' || path === '' ? <ChatView /> :
-       path === '/me/mood' ? <MoodWeatherView /> :
-       path === '/me/memory' ? <MemoryView /> :
-       path === '/me/tools' ? <ToolsHub /> :
-       path === '/me/tools/decouple' ? <DecoupleView /> :
-       path === '/me/tools/breathing' ? <BreathingView /> :
-       path === '/me/letters' ? <LettersView /> :
-       path === '/me/saved' ? <SavedView /> :
-       path === '/me/settings' ? <SettingsView /> :
-       <ChatView />}
+      <div style={{ display: isChatPath ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
+        <ChatView />
+      </div>
+      {overlay}
     </HomeLayout>
   );
 }

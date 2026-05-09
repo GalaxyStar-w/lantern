@@ -117,7 +117,7 @@ export async function handleChat(request, env, user) {
       memoryContext: memoryCtx,
       addressAs: user.address_as,
       nickname: user.nickname,
-      toneStyle: user.tone_style || 'warm',
+      toneStyle: user.tone_style || 'professional',
       daysAway,
     });
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
@@ -173,7 +173,7 @@ export async function handleOpener(_request, env, user) {
         memoryContext: memoryCtx,
         addressAs: user.address_as,
         nickname: user.nickname,
-        toneStyle: user.tone_style || 'warm',
+        toneStyle: user.tone_style || 'professional',
         daysAway,
         reunionMode: true,
       });
@@ -272,11 +272,19 @@ export async function handleChatStream(request, env, user) {
 
   const assistantMsgId = randomId();
 
+  // 先把空 assistant 消息入库，这样即便流中途断开，已生成的内容也能通过 UPDATE 保留
+  await d.run(
+    'INSERT INTO messages (id, conversation_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    assistantMsgId, conversationId, user.id, 'assistant', '', now(),
+  );
+
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
       const send = (event, data) => {
-        controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        try {
+          controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch { /* 客户端已断开 */ }
       };
 
       send('meta', {
@@ -287,37 +295,72 @@ export async function handleChatStream(request, env, user) {
 
       let fullText = '';
       let llmError = null;
-      try {
-        const history = await loadRecentContext(env, conversationId, CONTEXT_WINDOW);
-        const memoryCtx = ephemeral ? '' : await buildMemoryContext(env, user.id);
-        const daysAway = await getDaysSinceLastSeen(env, user.id);
-        const systemPrompt = buildSystemPrompt({
-          crisisLevel: crisis_level,
-          memoryContext: memoryCtx,
-          addressAs: user.address_as,
-          nickname: user.nickname,
-          toneStyle: user.tone_style || 'warm',
-          daysAway,
-        });
-        const messages = [{ role: 'system', content: systemPrompt }, ...history];
 
-        for await (const delta of callChatStream(env, user.id, messages)) {
+      const history = await loadRecentContext(env, conversationId, CONTEXT_WINDOW);
+      const memoryCtx = ephemeral ? '' : await buildMemoryContext(env, user.id);
+      const daysAway = await getDaysSinceLastSeen(env, user.id);
+      const systemPrompt = buildSystemPrompt({
+        crisisLevel: crisis_level,
+        memoryContext: memoryCtx,
+        addressAs: user.address_as,
+        nickname: user.nickname,
+        toneStyle: user.tone_style || 'professional',
+        daysAway,
+      });
+      const llmMessages = [{ role: 'system', content: systemPrompt }, ...history];
+
+      // 节流地把已生成内容写回 DB —— 保证中途断开也能保留 partial
+      let lastPersistedLen = 0;
+      const persistProgress = async () => {
+        if (fullText.length === lastPersistedLen) return;
+        lastPersistedLen = fullText.length;
+        try {
+          await d.run('UPDATE messages SET content = ? WHERE id = ?', fullText, assistantMsgId);
+        } catch (e) { console.error('persistProgress failed:', e?.message); }
+      };
+
+      let chunkCount = 0;
+      try {
+        for await (const delta of callChatStream(env, user.id, llmMessages)) {
           fullText += delta;
           send('chunk', { delta });
+          chunkCount += 1;
+          // 每 10 个 chunk 或每 20 字持久化一次
+          if (chunkCount % 10 === 0 || fullText.length - lastPersistedLen >= 20) {
+            await persistProgress();
+          }
         }
       } catch (e) {
         llmError = e?.message || String(e);
-        // 降级：本地 mock 一次性吐出
-        const fallback = mockReply(text, crisis_level);
-        fullText = fallback;
-        send('chunk', { delta: fallback });
+        console.error('chat stream LLM error:', llmError);
       }
 
-      // 入库 + 更新最后活跃
+      // 流式协议对不上时的兜底：回退到非流式再把完整回复一次性发出
+      if (!fullText && !llmError) {
+        console.warn('stream returned no content, falling back to non-stream');
+        try {
+          const full = await callChat(env, user.id, llmMessages);
+          if (full) {
+            fullText = full;
+            send('chunk', { delta: full });
+          }
+        } catch (e) {
+          llmError = e?.message || String(e);
+          console.error('fallback non-stream also failed:', llmError);
+        }
+      }
+
+      if (!fullText) {
+        const reason = llmError || '（未知原因）';
+        fullText = `（暂时说不出话：${reason}）`;
+        send('chunk', { delta: fullText });
+      }
+
+      // 最后一次把完整内容落库
       try {
         await d.run(
-          'INSERT INTO messages (id, conversation_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          assistantMsgId, conversationId, user.id, 'assistant', fullText || '（…）', now(),
+          'UPDATE messages SET content = ?, created_at = ? WHERE id = ?',
+          fullText, now(), assistantMsgId,
         );
         await d.run('UPDATE conversations SET last_msg_at = ? WHERE id = ?', now(), conversationId);
         await updateLastSeen(env, user.id);

@@ -39,10 +39,18 @@ export default function ChatView() {
     })();
   }, []);
 
+  // 滚动到底的总内容量签名：消息条数 + 最后一条的字数（流式更新时 content 变长会触发）
+  const lastLen = messages.length > 0 ? messages[messages.length - 1].content.length : 0;
+  const scrollSig = `${messages.length}:${lastLen}`;
   useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages.length, opener]);
+    // 下一帧再滚，确保 DOM 已更新
+    const raf = requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [scrollSig, opener]);
 
   const send = async (text: string, opts: { silent: boolean; ephemeral: boolean }) => {
     const local = detectCrisis(text);
@@ -112,15 +120,15 @@ export default function ChatView() {
         }
       }
     } catch (e) {
+      const err = (e as Error).message || '未知错误';
+      console.error('chat stream error', e);
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id && m.id !== assistantId));
-      // 失败提示
       setMessages((prev) => [...prev, {
         id: 'err-' + Date.now(),
         role: 'assistant',
-        content: '（这会儿说不出话了。稍后再试？）',
+        content: `（出错了：${err}）`,
         created_at: Date.now(),
       } as Message]);
-      console.error('chat stream error', e);
     }
   };
 

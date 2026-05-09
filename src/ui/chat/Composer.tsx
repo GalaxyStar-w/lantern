@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
+// 暂不开放语音：Chrome 的 Web Speech API 依赖 Google 服务，国内常被墙。
+// 待接入 OpenAI-compatible 的 /audio/transcriptions（如硅基流动、百炼）时改回 true。
+const VOICE_ENABLED = false;
+
 interface Props {
   onSend: (text: string, opts: { silent: boolean; ephemeral: boolean }) => Promise<void> | void;
   disabled?: boolean;
@@ -13,6 +17,7 @@ interface SpeechRecognitionLike extends EventTarget {
   interimResults: boolean;
   start(): void;
   stop(): void;
+  onstart: (() => void) | null;
   onresult: ((ev: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
   onerror: ((ev: unknown) => void) | null;
@@ -73,7 +78,11 @@ export default function Composer({ onSend, disabled }: Props) {
   };
 
   const toggleVoice = () => {
-    if (!SR) return;
+    console.log('[voice] toggleVoice, SR=', !!SR, 'listening=', listening);
+    if (!SR) {
+      alert('这个浏览器不支持语音识别。建议用 Chrome、Safari 或 Edge。');
+      return;
+    }
     if (listening) {
       try { srRef.current?.stop(); } catch { /* noop */ }
       setListening(false);
@@ -82,42 +91,50 @@ export default function Composer({ onSend, disabled }: Props) {
     try {
       const sr = new SR();
       sr.lang = 'zh-CN';
-      sr.continuous = true;
+      sr.continuous = false;
       sr.interimResults = true;
 
       baseTextRef.current = text ? text + (text.endsWith(' ') || text.endsWith('\n') ? '' : ' ') : '';
       finalTextRef.current = '';
 
+      sr.onstart = () => { console.log('[voice] started, say something…'); };
       sr.onresult = (ev) => {
-        let interim = '';
-        // 遍历 results 所有元素（而非仅 resultIndex 之后），把已 final 的全累积起来
-        for (let i = 0; i < ev.results.length; i++) {
-          const r = ev.results[i];
-          if (r.isFinal) {
-            // 只在当前索引 >= 已处理过的时加入；为简单起见，每次都重新聚合所有 final
-          }
-        }
-        // 更稳的做法：把所有 final 重新从头聚合，避免跨 result batch 漏取
         let finalAll = '';
+        let interim = '';
         for (let i = 0; i < ev.results.length; i++) {
           const r = ev.results[i];
           if (r.isFinal) finalAll += r[0].transcript;
           else interim += r[0].transcript;
         }
+        console.log('[voice] onresult final=', finalAll, 'interim=', interim);
         finalTextRef.current = finalAll;
         setText((baseTextRef.current + finalAll + interim).replace(/\s+$/, ''));
       };
       sr.onend = () => {
-        // 兜底：最后一次把 final 写回（避免短时间 end 时 onresult 还没触发 final）
+        console.log('[voice] ended, final=', finalTextRef.current);
         const combined = (baseTextRef.current + finalTextRef.current).replace(/\s+$/, '');
         if (combined) setText(combined);
         setListening(false);
       };
-      sr.onerror = () => setListening(false);
+      sr.onerror = (ev) => {
+        const err = (ev as { error?: string }).error || 'unknown';
+        console.warn('[voice] error:', err, ev);
+        setListening(false);
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
+          alert('麦克风权限未允许。请在地址栏旁的锁图标里允许"麦克风"，或去系统设置 > 隐私 > 麦克风 给浏览器授权。');
+        } else if (err === 'network') {
+          alert('语音识别走不通。Chrome 默认用 Google 的识别服务，国内网络常被墙。可以试试 Safari，或者继续用键盘。');
+        } else if (err !== 'no-speech' && err !== 'aborted') {
+          alert(`语音识别出错了：${err}`);
+        }
+      };
       sr.start();
+      console.log('[voice] start() called');
       srRef.current = sr;
       setListening(true);
-    } catch {
+    } catch (e) {
+      console.error('[voice] start failed:', e);
+      alert(`语音启动失败：${(e as Error).message || '未知错误'}`);
       setListening(false);
     }
   };
@@ -141,7 +158,7 @@ export default function Composer({ onSend, disabled }: Props) {
         </label>
       </div>
       <form onSubmit={submit}>
-        {voiceSupported && (
+        {VOICE_ENABLED && voiceSupported && (
           <button
             type="button"
             className={`voice-btn ${listening ? 'on' : ''}`}

@@ -43,7 +43,7 @@ export async function resolveConfig(env, userId, kind) {
  * messages: [{role, content}, ...]
  * 返回助手消息文本；失败抛错
  */
-export async function callChat(env, userId, messages, { temperature = 0.7, maxTokens = 800 } = {}) {
+export async function callChat(env, userId, messages, { temperature = 0.4, maxTokens = 800 } = {}) {
   const cfg = await resolveConfig(env, userId, 'chat');
   if (!cfg) throw new Error('NO_LLM_CONFIG');
 
@@ -76,7 +76,7 @@ export async function callChat(env, userId, messages, { temperature = 0.7, maxTo
  * 流式聊天：返回一个 async generator 吐出文本增量
  * 失败时抛错（和 callChat 一致），调用方自己 fallback
  */
-export async function* callChatStream(env, userId, messages, { temperature = 0.7, maxTokens = 800 } = {}) {
+export async function* callChatStream(env, userId, messages, { temperature = 0.4, maxTokens = 800 } = {}) {
   const cfg = await resolveConfig(env, userId, 'chat');
   if (!cfg) throw new Error('NO_LLM_CONFIG');
 
@@ -104,33 +104,64 @@ export async function* callChatStream(env, userId, messages, { temperature = 0.7
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
+  let yielded = 0;
+  let totalBytes = 0;
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    buf += decoder.decode(value, { stream: true });
+    const chunk = decoder.decode(value, { stream: true });
+    totalBytes += chunk.length;
+    buf += chunk;
+    // 统一换行：有些服务发 \r\n\r\n
+    buf = buf.replace(/\r\n/g, '\n');
 
-    // SSE 按空行分事件，每个事件可能多行 data:
     let idx;
     while ((idx = buf.indexOf('\n\n')) !== -1) {
       const event = buf.slice(0, idx);
       buf = buf.slice(idx + 2);
       for (const line of event.split('\n')) {
+        // 忽略 SSE 注释（以 `:` 开头、或空行）
+        if (!line || line.startsWith(':')) continue;
+        // 兼容 "data:xxx" 和 "data: xxx"
         if (!line.startsWith('data:')) continue;
         const payload = line.slice(5).trim();
-        if (payload === '[DONE]') return;
+        if (payload === '[DONE]') {
+          if (yielded === 0) {
+            console.warn('[llm stream] DONE with 0 chunks; totalBytes=', totalBytes);
+          }
+          return;
+        }
         if (!payload) continue;
         try {
           const obj = JSON.parse(payload);
-          const delta = obj?.choices?.[0]?.delta?.content;
+          // 兼容多种 payload 结构：
+          //   OpenAI 风: choices[0].delta.content
+          //   部分魔改: choices[0].message.content
+          //   Anthropic 风: delta.text
+          //   一些供应商首 chunk 有 role 但无 content，我们跳过
+          const delta =
+            obj?.choices?.[0]?.delta?.content ??
+            obj?.choices?.[0]?.message?.content ??
+            obj?.delta?.text ??
+            obj?.content ??
+            null;
           if (typeof delta === 'string' && delta.length > 0) {
+            yielded += 1;
             yield delta;
           }
-        } catch {
-          // 忽略损坏块
+        } catch (parseErr) {
+          console.warn('[llm stream] JSON parse failed, payload head:', payload.slice(0, 120));
+          void parseErr;
         }
       }
     }
+  }
+
+  // 流正常结束但从未 yield 过：打 raw buffer 头帮调试
+  if (yielded === 0) {
+    console.warn('[llm stream] no content yielded. totalBytes=', totalBytes,
+      'leftover buf head:', buf.slice(0, 300));
   }
 }
 
