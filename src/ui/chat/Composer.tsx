@@ -35,7 +35,8 @@ export default function Composer({ onSend, disabled }: Props) {
   const [listening, setListening] = useState(false);
   const composingRef = useRef(false);
   const srRef = useRef<SpeechRecognitionLike | null>(null);
-  const sppedTextRef = useRef('');
+  const baseTextRef = useRef('');   // 录音开始时已有的文字
+  const finalTextRef = useRef('');  // 本次录音累积的最终识别文本
 
   const SR = getSR();
   const voiceSupported = !!SR;
@@ -48,10 +49,13 @@ export default function Composer({ onSend, disabled }: Props) {
     e.preventDefault();
     const t = text.trim();
     if (!t || sending) return;
+    setText('');        // 立即清空，不等后端
     setSending(true);
     try {
       await onSend(t, { silent, ephemeral });
-      setText('');
+    } catch {
+      // 失败时把内容还回去，让用户不丢
+      setText(t);
     } finally {
       setSending(false);
     }
@@ -80,23 +84,35 @@ export default function Composer({ onSend, disabled }: Props) {
       sr.lang = 'zh-CN';
       sr.continuous = true;
       sr.interimResults = true;
-      sppedTextRef.current = text;
+
+      baseTextRef.current = text ? text + (text.endsWith(' ') || text.endsWith('\n') ? '' : ' ') : '';
+      finalTextRef.current = '';
+
       sr.onresult = (ev) => {
         let interim = '';
-        let final = '';
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        // 遍历 results 所有元素（而非仅 resultIndex 之后），把已 final 的全累积起来
+        for (let i = 0; i < ev.results.length; i++) {
           const r = ev.results[i];
-          if (r.isFinal) final += r[0].transcript;
+          if (r.isFinal) {
+            // 只在当前索引 >= 已处理过的时加入；为简单起见，每次都重新聚合所有 final
+          }
+        }
+        // 更稳的做法：把所有 final 重新从头聚合，避免跨 result batch 漏取
+        let finalAll = '';
+        for (let i = 0; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          if (r.isFinal) finalAll += r[0].transcript;
           else interim += r[0].transcript;
         }
-        if (final) {
-          sppedTextRef.current = (sppedTextRef.current + final).trim();
-          setText(sppedTextRef.current);
-        } else {
-          setText((sppedTextRef.current + interim).trim());
-        }
+        finalTextRef.current = finalAll;
+        setText((baseTextRef.current + finalAll + interim).replace(/\s+$/, ''));
       };
-      sr.onend = () => setListening(false);
+      sr.onend = () => {
+        // 兜底：最后一次把 final 写回（避免短时间 end 时 onresult 还没触发 final）
+        const combined = (baseTextRef.current + finalTextRef.current).replace(/\s+$/, '');
+        if (combined) setText(combined);
+        setListening(false);
+      };
       sr.onerror = () => setListening(false);
       sr.start();
       srRef.current = sr;
