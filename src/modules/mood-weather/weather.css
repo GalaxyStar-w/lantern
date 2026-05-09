@@ -1,0 +1,145 @@
+/*
+ * 心情天气动态背景 —— 纯 CSS 版（阶段 1）
+ * 阶段 2 再补 Canvas 的雨粒子 / 云漂移 SVG
+ */
+
+.weather-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.7;
+  transition: opacity 1.5s ease, filter 1.5s ease;
+  --wind-intensity: 1;
+}
+
+.weather-bg::before,
+.weather-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+}
+
+/* 晴 —— 暖阳光斑缓慢飘浮 */
+.weather-sunny::before {
+  width: 40vw; height: 40vw;
+  top: -8vw; left: -8vw;
+  background: radial-gradient(circle, #f5cd78 0%, transparent 65%);
+  animation: drift-slow 24s ease-in-out infinite;
+}
+.weather-sunny::after {
+  width: 30vw; height: 30vw;
+  bottom: -6vw; right: 5vw;
+  background: radial-gradient(circle, #f5b06d 0%, transparent 70%);
+  animation: drift-slow 30s ease-in-out -12s infinite reverse;
+}
+
+/* 多云 —— 柔光缓慢呼吸 */
+.weather-partlyCloudy::before {
+  width: 50vw; height: 50vw;
+  top: -12vw; right: -10vw;
+  background: radial-gradient(circle, rgba(200,215,235,0.55) 0%, transparent 65%);
+  animation: breathe 18s ease-in-out infinite;
+}
+.weather-partlyCloudy::after {
+  width: 35vw; height: 35vw;
+  bottom: -5vw; left: -5vw;
+  background: radial-gradient(circle, rgba(120,140,170,0.35) 0%, transparent 70%);
+  animation: drift-slow 28s ease-in-out infinite;
+}
+
+/* 阴 —— 灰暗静止，偶尔微光 */
+.weather-cloudy {
+  opacity: 0.55;
+  filter: saturate(0.7);
+}
+.weather-cloudy::before {
+  width: 70vw; height: 70vw;
+  top: -20vw; left: -15vw;
+  background: radial-gradient(circle, rgba(90,105,130,0.5) 0%, transparent 70%);
+  animation: dim-pulse 20s ease-in-out infinite;
+}
+.weather-cloudy::after {
+  width: 30vw; height: 30vw;
+  bottom: 10vw; right: -8vw;
+  background: radial-gradient(circle, rgba(70,85,110,0.4) 0%, transparent 70%);
+  animation: drift-slow 40s linear infinite;
+}
+
+/* 雨 —— 深蓝 + 斜向下落的细线 */
+.weather-rainy {
+  background:
+    repeating-linear-gradient(
+      calc(100deg - var(--wind-intensity) * 10deg),
+      transparent 0px,
+      transparent 18px,
+      rgba(180, 200, 230, 0.22) 18px,
+      rgba(180, 200, 230, 0.22) 19px,
+      transparent 20px,
+      transparent 40px
+    );
+  background-size: 40px 40px;
+  animation: rain-fall calc(1.2s / var(--wind-intensity)) linear infinite;
+}
+.weather-rainy::before {
+  width: 80vw; height: 80vw;
+  top: -30vw; left: -20vw;
+  background: radial-gradient(circle, rgba(50,80,130,0.55) 0%, transparent 70%);
+  animation: breathe 22s ease-in-out infinite;
+}
+
+/* 风雨 —— 更密的雨 + 水平微抖 */
+.weather-stormy {
+  background:
+    repeating-linear-gradient(
+      calc(110deg - var(--wind-intensity) * 20deg),
+      transparent 0px,
+      transparent 10px,
+      rgba(190, 205, 235, 0.32) 10px,
+      rgba(190, 205, 235, 0.32) 11px,
+      transparent 12px,
+      transparent 26px
+    );
+  background-size: 26px 26px;
+  animation: rain-fall calc(0.7s / var(--wind-intensity)) linear infinite, storm-shake 3s ease-in-out infinite;
+}
+.weather-stormy::before {
+  width: 100vw; height: 100vh;
+  top: 0; left: 0;
+  background: radial-gradient(ellipse at 30% 40%, rgba(30,50,100,0.6) 0%, transparent 60%);
+  animation: breathe 14s ease-in-out infinite;
+  filter: blur(40px);
+}
+
+@keyframes drift-slow {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(4vw, -3vw); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
+}
+@keyframes dim-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.6; }
+}
+@keyframes rain-fall {
+  0%   { background-position: 0 0; }
+  100% { background-position: 20px 40px; }
+}
+@keyframes storm-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-0.3vw); }
+  75% { transform: translateX(0.3vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weather-bg,
+  .weather-bg::before,
+  .weather-bg::after {
+    animation: none !important;
+  }
+}

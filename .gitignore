@@ -1,0 +1,15 @@
+node_modules
+dist
+.wrangler
+.DS_Store
+
+# 本地 secrets（API key 等），永远不提交
+.dev.vars
+server/.dev.vars
+.env
+.env.local
+
+# IDE
+.vscode
+.idea
+*.log

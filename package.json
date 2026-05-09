@@ -1,0 +1,41 @@
+{
+  "name": "lantern",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:lan": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview --host 0.0.0.0",
+    "stage": "cp pages-functions/_worker.js dist/_worker.js",
+    "deploy": "npm run build && npm run stage && wrangler pages deploy dist --project-name=lantern --branch=main --commit-dirty=true",
+    "deploy:server": "cd server && wrangler deploy",
+    "deploy:all": "npm run deploy:server && npm run deploy",
+    "d1:migrate": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --remote",
+    "d1:migrate:local": "cd server && wrangler d1 execute lantern-db --file=./migrations/0001_init.sql --local",
+    "d1:seed": "cd server && wrangler d1 execute lantern-db --file=../scripts/seed-d1.sql --remote",
+    "d1:seed:local": "cd server && wrangler d1 execute lantern-db --file=../scripts/seed-d1.sql --local",
+    "smoke": "node scripts/smoke-assessor.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.10",
+    "wrangler": "^4.90.0"
+  }
+}

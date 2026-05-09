@@ -1,0 +1,14 @@
+name = "lantern-server"
+main = "worker.js"
+compatibility_date = "2026-05-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lantern-db"
+database_id = "713140e5-1c55-4f4c-8d88-e48aca445952"
+
+# 默认 LLM 配置通过 .dev.vars（本地）或 `wrangler secret put`（远程）注入
+# endpoint / model / api_key 三件套都走 env，代码里不写死任何值
+# 变量名：DEFAULT_CHAT_ENDPOINT / DEFAULT_CHAT_MODEL / DEFAULT_CHAT_API_KEY
+#         DEFAULT_ASSESS_ENDPOINT / DEFAULT_ASSESS_MODEL / DEFAULT_ASSESS_API_KEY
+#         KEY_ENC_SECRET（AES-GCM 加密用户自己存的 key）

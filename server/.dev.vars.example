@@ -1,0 +1,28 @@
+# 本地开发的 secrets 模板
+# 使用方式：
+#   cp server/.dev.vars.example server/.dev.vars
+#   把下面的占位符改成你自己的真实值
+# .dev.vars 已在 .gitignore，绝不会被提交
+#
+# 远程部署时对应命令：
+#   cd server && npx wrangler secret put DEFAULT_CHAT_API_KEY
+# 每个 secret 单独执行一次，粘贴值回车
+
+# --- 聊天 LLM（OpenAI-compatible） ---
+# Base URL 示例：
+#   DeepSeek:        https://api.deepseek.com/v1
+#   OpenAI 官方:      https://api.openai.com/v1
+#   硅基流动:         https://api.siliconflow.cn/v1
+#   自建 one-api/newapi: https://your-domain.com/v1
+DEFAULT_CHAT_ENDPOINT=https://api.deepseek.com/v1
+DEFAULT_CHAT_MODEL=deepseek-chat
+DEFAULT_CHAT_API_KEY=sk-your-chat-api-key-here
+
+# --- 评估 LLM（可和 chat 用同一套，也可拆开省钱）---
+DEFAULT_ASSESS_ENDPOINT=https://api.deepseek.com/v1
+DEFAULT_ASSESS_MODEL=deepseek-chat
+DEFAULT_ASSESS_API_KEY=sk-your-assess-api-key-here
+
+# --- 对称加密密钥（保护用户自己存的 apiKey；至少 32 位随机字符串）---
+# 可用：openssl rand -base64 32
+KEY_ENC_SECRET=please-replace-with-a-random-32-chars-or-longer-string

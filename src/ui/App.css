@@ -1,0 +1,401 @@
+.splash {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  letter-spacing: 0.2em;
+}
+
+.home-layout, .admin-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  padding: 0.9rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+.app-header .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-weight: 300;
+  letter-spacing: 0.15em;
+}
+.app-header .brand::before {
+  content: '🏮';
+  filter: grayscale(0.3);
+}
+.app-header nav {
+  display: flex;
+  gap: 0.6rem;
+}
+.app-header nav a {
+  color: var(--text-dim);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  transition: background 0.2s, color 0.2s;
+}
+.app-header nav a.active {
+  color: var(--text);
+  background: var(--bubble-other);
+}
+
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 登录 */
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1.2rem;
+}
+.login-card {
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  text-align: center;
+}
+.login-card h1 {
+  font-weight: 200;
+  letter-spacing: 0.3em;
+  font-size: 1.4rem;
+  color: var(--text);
+  margin: 0;
+}
+.login-card p {
+  color: var(--text-dim);
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.8;
+}
+.login-card .err {
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+/* 聊天 */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.bubble {
+  max-width: 80%;
+  padding: 0.75rem 1rem;
+  border-radius: 18px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-weight: 300;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--bubble-self);
+}
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--bubble-other);
+}
+
+.composer {
+  padding: 0.9rem 0 1.3rem;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.35), transparent);
+}
+.composer form {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+.composer textarea {
+  resize: none;
+  min-height: 2.6rem;
+  max-height: 8rem;
+  border-radius: 18px;
+}
+.composer button {
+  flex: 0 0 auto;
+}
+
+/* crisis banner */
+.crisis-banner {
+  margin: 0.5rem 0;
+  padding: 0.9rem 1.1rem;
+  background: rgba(245, 167, 167, 0.1);
+  border: 1px solid rgba(245, 167, 167, 0.3);
+  border-radius: 16px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+.crisis-banner strong {
+  color: var(--danger);
+  font-weight: 500;
+}
+.crisis-banner a {
+  color: var(--danger);
+}
+
+/* 心情地图 */
+.mood-view {
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.2rem;
+}
+.mood-view h2 {
+  font-weight: 200;
+  letter-spacing: 0.2em;
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  margin: 0 0 2rem;
+}
+.mood-current {
+  text-align: center;
+  padding: 2rem 0;
+}
+.mood-current .emoji {
+  font-size: 3rem;
+}
+.mood-current .phrase {
+  margin-top: 1rem;
+  font-size: 1.05rem;
+  color: var(--text);
+}
+.mood-band {
+  display: flex;
+  gap: 2px;
+  height: 48px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+.mood-band .cell {
+  flex: 1;
+  transition: opacity 0.3s;
+}
+.mood-band .cell.empty {
+  background: var(--bubble-other);
+  opacity: 0.3;
+}
+.mood-band .cell.sunny       { background: linear-gradient(180deg, #f5d07a, #f0b85d); }
+.mood-band .cell.partlyCloudy{ background: linear-gradient(180deg, #b6c5d8, #8ba3be); }
+.mood-band .cell.cloudy      { background: linear-gradient(180deg, #7d8aa0, #5a6880); }
+.mood-band .cell.rainy       { background: linear-gradient(180deg, #4a6da0, #2f4c7a); }
+.mood-band .cell.stormy      { background: linear-gradient(180deg, #2a3e6e, #14213d); }
+
+.mood-narrative {
+  margin-top: 1rem;
+  color: var(--text-dim);
+  line-height: 1.8;
+  font-size: 0.95rem;
+  text-align: center;
+}
+.mood-footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.8;
+}
+
+/* 设置 */
+.settings {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 2rem 1.2rem;
+}
+.settings section {
+  margin-bottom: 2rem;
+}
+.settings h3 {
+  font-weight: 300;
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin: 0 0 0.8rem;
+}
+.settings .theme-picker {
+  display: flex;
+  gap: 0.8rem;
+}
+.settings .theme-picker button {
+  flex: 1;
+}
+.settings .theme-picker button.active {
+  background: var(--bubble-self);
+  border-color: var(--accent);
+}
+
+.llm-slot {
+  background: var(--bubble-other);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.llm-slot h4 {
+  margin: 0 0 0.2rem;
+  font-weight: 400;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.llm-slot .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.llm-slot .field > span {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+}
+.llm-slot input {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.9rem;
+  border-radius: 10px;
+}
+
+/* 管理后台 */
+.admin-layout .admin-header {
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+.admin-layout .admin-header nav {
+  display: flex;
+  gap: 0.6rem;
+}
+.admin-layout .admin-body {
+  flex: 1;
+  padding: 1.5rem;
+  overflow: auto;
+}
+.user-list {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 900px;
+}
+.user-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px 80px 80px 90px;
+  gap: 0.8rem;
+  padding: 0.8rem 1rem;
+  background: var(--bubble-other);
+  border-radius: 12px;
+  align-items: center;
+  font-size: 0.92rem;
+}
+.user-row a {
+  color: var(--text);
+}
+.user-row .dim {
+  color: var(--text-dim);
+}
+.user-row .crisis-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  display: inline-block;
+  margin-right: 0.4rem;
+}
+
+.professional-toggle {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+
+.metric-bars {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.metric-bars .row {
+  display: grid;
+  grid-template-columns: 110px 1fr 30px;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.88rem;
+}
+.metric-bars .bar {
+  background: var(--bubble-other);
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+.metric-bars .bar > div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: width 0.3s;
+}
+
+.messages-stream {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+.messages-stream .msg {
+  padding: 0.55rem 0.8rem;
+  background: var(--bubble-other);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.messages-stream .msg.user { background: var(--bubble-self); }
+.messages-stream .msg .meta {
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  margin-bottom: 0.3rem;
+  display: flex;
+  gap: 0.8rem;
+}
+.messages-stream .msg.crisis-high .meta::before,
+.messages-stream .msg.crisis-medium .meta::before {
+  content: '⚠';
+  color: var(--danger);
+}
