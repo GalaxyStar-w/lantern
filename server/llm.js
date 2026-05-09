@@ -73,6 +73,68 @@ export async function callChat(env, userId, messages, { temperature = 0.7, maxTo
 }
 
 /**
+ * 流式聊天：返回一个 async generator 吐出文本增量
+ * 失败时抛错（和 callChat 一致），调用方自己 fallback
+ */
+export async function* callChatStream(env, userId, messages, { temperature = 0.7, maxTokens = 800 } = {}) {
+  const cfg = await resolveConfig(env, userId, 'chat');
+  if (!cfg) throw new Error('NO_LLM_CONFIG');
+
+  const res = await fetch(`${cfg.endpoint}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      messages,
+      temperature,
+      max_tokens: maxTokens,
+      stream: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`LLM_HTTP_${res.status}: ${body.slice(0, 200)}`);
+  }
+  if (!res.body) throw new Error('LLM_NO_BODY');
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+
+    // SSE 按空行分事件，每个事件可能多行 data:
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) !== -1) {
+      const event = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      for (const line of event.split('\n')) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') return;
+        if (!payload) continue;
+        try {
+          const obj = JSON.parse(payload);
+          const delta = obj?.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string' && delta.length > 0) {
+            yield delta;
+          }
+        } catch {
+          // 忽略损坏块
+        }
+      }
+    }
+  }
+}
+
+/**
  * 轻量连通性测试：用最小消息请求一次，检测 endpoint/key/model 是否都对
  * 返回 { ok: true, model } 或 { ok: false, error }
  */

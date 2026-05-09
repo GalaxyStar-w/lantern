@@ -5,7 +5,7 @@ import { requireAuth, requireRole } from './auth.js';
 import { json, CORS_HEADERS } from './utils.js';
 
 import { handleLogin, handleMe } from './handlers/auth.js';
-import { handleChat, handleListMessages, handleOpener, handleDeleteMessage } from './handlers/chat.js';
+import { handleChat, handleChatStream, handleListMessages, handleOpener, handleDeleteMessage } from './handlers/chat.js';
 import { handleMyMemory, handleDeleteMoment, handleForgetProfile } from './handlers/memory.js';
 import { handleSaveMoment, handleListSaved, handleDeleteSaved } from './handlers/saved.js';
 import { handleExport } from './handlers/exportData.js';
@@ -56,6 +56,7 @@ export default {
 
       if (pathname === '/api/me' && method === 'GET') return await handleMe(request, env, user);
       if (pathname === '/api/chat' && method === 'POST') return await handleChat(request, env, user);
+      if (pathname === '/api/chat/stream' && method === 'POST') return await handleChatStream(request, env, user);
       if (pathname === '/api/chat/opener' && method === 'GET') return await handleOpener(request, env, user);
       if (pathname === '/api/messages' && method === 'GET') return await handleListMessages(request, env, user);
       {

@@ -1,6 +1,7 @@
 import { db, now, randomId } from '../d1.js';
 import { json } from '../utils.js';
 import { aggregateWindow } from '../assessor/aggregate.js';
+import { runLLMAssessment } from '../assessor/llmScore.js';
 
 export async function handleAdminUsers(_request, env, _admin) {
   const d = db(env);
@@ -73,17 +74,28 @@ function generateInviteCode() {
   return s;
 }
 
-// 手动触发评估（阶段 1：先跑规则聚合；阶段 3 接入 LLM）
+// 手动触发评估：优先 LLM 综合打分；LLM 失败时降级规则聚合
 export async function handleAdminRunAssessment(_request, env, _admin, pathParams) {
   const { userId } = pathParams;
+  try {
+    const r = await runLLMAssessment(env, userId, { manual: true });
+    if (r) return json({ source: 'llm_combined', ...r });
+  } catch (e) {
+    console.error('manual LLM assessment failed:', e?.message);
+  }
+
+  // 降级：规则聚合
   const d = db(env);
   const windowStart = now() - 7 * 24 * 3600 * 1000;
   const msgs = await d.all(
-    'SELECT rule_tags, role FROM messages WHERE user_id = ? AND created_at >= ? ORDER BY created_at ASC',
+    `SELECT rule_tags, role FROM messages
+     WHERE user_id = ? AND created_at >= ?
+       AND (ephemeral IS NULL OR ephemeral = 0)
+       AND (deleted IS NULL OR deleted = 0)
+     ORDER BY created_at ASC`,
     userId, windowStart,
   );
   const agg = aggregateWindow(msgs);
-
   const id = randomId();
   await d.run(
     `INSERT INTO assessments (id, user_id, created_at, source, window_start, window_end, msg_count, phq9_total, phq9_items, gad7_total, gad7_items, notes)
@@ -93,5 +105,5 @@ export async function handleAdminRunAssessment(_request, env, _admin, pathParams
     agg.gad7_total, JSON.stringify(agg.gad7_items),
     null,
   );
-  return json({ id, ...agg });
+  return json({ id, source: 'rule_aggregate', ...agg });
 }

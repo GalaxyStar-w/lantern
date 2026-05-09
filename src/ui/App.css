@@ -241,6 +241,24 @@
   box-shadow: 0 0 30px rgba(139, 157, 195, 0.35);
 }
 
+.milestone-notice {
+  align-self: center;
+  padding: 0.6rem 1.1rem;
+  background: rgba(245, 205, 120, 0.12);
+  border: 1px dashed rgba(245, 205, 120, 0.4);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+  transition: opacity 0.3s;
+  animation: milestone-in 0.8s ease-out;
+}
+.milestone-notice:hover { opacity: 0.8; }
+@keyframes milestone-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* 呼吸引导 */
 .breathing-overlay {
   position: fixed;

@@ -16,6 +16,7 @@ export default function ChatView() {
   const [showCrisis, setShowCrisis] = useState(false);
   const [opener, setOpener] = useState<string | null>(null);
   const [pendingLetterId, setPendingLetterId] = useState<string | null>(null);
+  const [milestonePhrase, setMilestonePhrase] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { mood, refresh: refreshMood } = useMoodWeather();
 
@@ -30,6 +31,7 @@ export default function ChatView() {
         setMessages((r.messages as Message[]) || []);
         setOpener(o.opener || null);
         setPendingLetterId(p.pendingLetterId || null);
+        if (o.milestone?.phrase) setMilestonePhrase(o.milestone.phrase);
         const hasRecentCrisis = ((r.messages as Message[]) || []).slice(-10).some(
           (m) => m.crisis_level === 'high',
         );
@@ -59,30 +61,69 @@ export default function ChatView() {
     setMessages((prev) => [...prev, optimistic]);
     if (opener) setOpener(null);
 
-    try {
-      const r = await api.chat(text, opts);
-      const userMsg = r.userMessage as Message;
-      const reply = r.reply as Message | null;
-
-      setMessages((prev) => {
-        const filtered = prev.filter((m) => m.id !== optimistic.id);
-        const next = [...filtered, userMsg];
-        if (reply) next.push(reply);
-        else if (opts.silent) {
-          next.push({
+    // silent 走非流式（没有 AI 回复）
+    if (opts.silent) {
+      try {
+        const r = await api.chat(text, opts);
+        const userMsg = r.userMessage as Message;
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== optimistic.id);
+          return [...filtered, userMsg, {
             id: 'silent-' + userMsg.id,
             role: 'assistant',
             content: '（静静地听着）',
             created_at: userMsg.created_at + 1,
-          });
-        }
-        return next;
-      });
+          } as Message];
+        });
+        if (userMsg.crisis_level === 'high') setShowCrisis(true);
+        refreshMood();
+      } catch {
+        setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+      }
+      return;
+    }
 
-      if (userMsg.crisis_level === 'high') setShowCrisis(true);
-      refreshMood();
-    } catch {
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+    // 流式：边收边追加
+    let userMsg: Message | null = null;
+    let assistantId: string | null = null;
+    let buffer = '';
+    try {
+      for await (const ev of api.chatStream(text, opts)) {
+        if (ev.event === 'meta') {
+          const data = ev.data as { userMessage: Message; assistantMessageId: string };
+          userMsg = data.userMessage;
+          assistantId = data.assistantMessageId;
+          // 用真实 user 消息替换占位，插入空的 assistant
+          setMessages((prev) => {
+            const filtered = prev.filter((m) => m.id !== optimistic.id);
+            return [...filtered, userMsg!, { id: assistantId!, role: 'assistant', content: '', created_at: Date.now() } as Message];
+          });
+          if (userMsg.crisis_level === 'high') setShowCrisis(true);
+        } else if (ev.event === 'chunk') {
+          const d = ev.data as { delta: string };
+          buffer += d.delta;
+          const currentBuf = buffer;
+          const aid = assistantId;
+          if (aid) {
+            setMessages((prev) => prev.map((m) => m.id === aid ? { ...m, content: currentBuf } : m));
+          }
+        } else if (ev.event === 'done') {
+          refreshMood();
+          const data = ev.data as { milestones?: Array<{ phrase: string }> };
+          const m = data.milestones?.[0];
+          if (m?.phrase) setMilestonePhrase(m.phrase);
+        }
+      }
+    } catch (e) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id && m.id !== assistantId));
+      // 失败提示
+      setMessages((prev) => [...prev, {
+        id: 'err-' + Date.now(),
+        role: 'assistant',
+        content: '（这会儿说不出话了。稍后再试？）',
+        created_at: Date.now(),
+      } as Message]);
+      console.error('chat stream error', e);
     }
   };
 
@@ -127,6 +168,11 @@ export default function ChatView() {
             >
               💌 过去的你，给你寄了一封信
             </a>
+          )}
+          {milestonePhrase && (
+            <div className="milestone-notice" onClick={() => setMilestonePhrase(null)}>
+              🕯 {milestonePhrase}
+            </div>
           )}
         </div>
         <Composer onSend={send} />

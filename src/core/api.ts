@@ -77,7 +77,47 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text, ...opts }),
     }),
-  opener: () => apiFetch<{ opener: string | null; daysAway: number | null }>('/api/chat/opener'),
+  chatStream: async function* (text: string, opts: { silent?: boolean; ephemeral?: boolean } = {}) {
+    const token = getToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ text, ...opts }),
+    });
+    if (!res.ok || !res.body) {
+      let err = `HTTP ${res.status}`;
+      try { const j = await res.json(); if ((j as { error?: string }).error) err = (j as { error: string }).error; } catch { /* ignore */ }
+      throw new Error(err);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) !== -1) {
+        const raw = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        let ev = 'message';
+        let data = '';
+        for (const line of raw.split('\n')) {
+          if (line.startsWith('event:')) ev = line.slice(6).trim();
+          else if (line.startsWith('data:')) data += line.slice(5).trim();
+        }
+        if (!data) continue;
+        try {
+          yield { event: ev, data: JSON.parse(data) };
+        } catch {
+          // ignore
+        }
+      }
+    }
+  },
+  opener: () => apiFetch<{ opener: string | null; daysAway: number | null; milestone: { id: string; phrase: string; created_at: number } | null }>('/api/chat/opener'),
   deleteMessage: (id: string) => apiFetch<{ ok: boolean }>(`/api/messages/${id}`, { method: 'DELETE' }),
   myMemory: () => apiFetch<{ profile: unknown; moments: Array<{ id: string; tag: string; summary: string; created_at: number }> }>('/api/me/memory'),
   deleteMoment: (id: string) => apiFetch<{ ok: boolean }>(`/api/me/memory/moments/${id}`, { method: 'DELETE' }),

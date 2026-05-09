@@ -7,10 +7,12 @@
 
 import { db, now, randomId } from '../d1.js';
 import { classifyMessage } from '../assessor/classify.js';
-import { callChat } from '../llm.js';
+import { callChat, callChatStream } from '../llm.js';
 import { buildSystemPrompt } from '../systemPrompt.js';
 import { buildMemoryContext, getDaysSinceLastSeen, updateLastSeen } from '../memory/retriever.js';
 import { maybeRecordMoment } from '../memory/momentDetector.js';
+import { maybeRunLLMAssessment } from '../assessor/llmScore.js';
+import { checkMilestones, getLatestUnreadMilestone } from '../memory/milestones.js';
 import { json } from '../utils.js';
 
 const CONTEXT_WINDOW = 20;
@@ -133,10 +135,17 @@ export async function handleChat(request, env, user) {
   await d.run('UPDATE conversations SET last_msg_at = ? WHERE id = ?', now(), conversationId);
   await updateLastSeen(env, user.id);
 
+  let milestones = [];
+  if (!ephemeral) {
+    try { milestones = await checkMilestones(env, user.id); } catch (e) { console.error(e); }
+    try { await maybeRunLLMAssessment(env, user.id); } catch (e) { console.error(e); }
+  }
+
   return json({
     conversationId,
     userMessage: { id: userMsgId, role: 'user', content: text, created_at: t, crisis_level: effectiveCrisis },
     reply: { id: assistantMsgId, role: 'assistant', content: reply, created_at: now() },
+    milestones,
     llmError,
   });
 }
@@ -178,7 +187,8 @@ export async function handleOpener(_request, env, user) {
   }
 
   if (opener) await updateLastSeen(env, user.id);
-  return json({ opener, daysAway });
+  const milestone = await getLatestUnreadMilestone(env, user.id);
+  return json({ opener, daysAway, milestone });
 }
 
 export async function handleListMessages(_request, env, user) {
@@ -208,4 +218,138 @@ export async function handleDeleteMessage(_request, env, user, pathParams) {
   );
   // 同步撤掉相关的 rule_tags / crisis 影响：不做，影响很小且会让代码复杂
   return json({ ok: true });
+}
+
+// 流式聊天：text/event-stream
+// 自定义协议（精简版）：
+//   event: meta  data: {"userMessageId","conversationId","crisis_level","assistantMessageId"}
+//   event: chunk data: {"delta":"..."}
+//   event: done  data: {"fullText":"...","llmError":null}
+export async function handleChatStream(request, env, user) {
+  const body = await request.json().catch(() => ({}));
+  const text = (body.text || '').toString().trim();
+  if (!text) return json({ error: '说点什么都可以' }, 400);
+
+  const silent = body.silent === true;
+  const ephemeral = body.ephemeral === true;
+
+  // silent 模式不开流，直接走普通 chat
+  if (silent) {
+    return handleChat(new Request(request.url, {
+      method: 'POST',
+      headers: request.headers,
+      body: JSON.stringify({ text, silent, ephemeral }),
+    }), env, user);
+  }
+
+  const d = db(env);
+  const conversationId = await getOrCreateConversation(env, user.id);
+  const t = now();
+
+  const { rule_tags, crisis_level, matched } = classifyMessage(text);
+  const effectiveRuleTags = ephemeral ? null : rule_tags;
+  const effectiveCrisis = ephemeral ? 'none' : crisis_level;
+
+  const userMsgId = randomId();
+  await d.run(
+    `INSERT INTO messages
+     (id, conversation_id, user_id, role, content, created_at, rule_tags, crisis_level, ephemeral, silent)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    userMsgId, conversationId, user.id, 'user', text, t,
+    effectiveRuleTags, effectiveCrisis,
+    ephemeral ? 1 : 0, 0,
+  );
+
+  if (!ephemeral && (crisis_level === 'high' || crisis_level === 'medium')) {
+    await d.run(
+      'INSERT INTO crisis_events (id, user_id, message_id, level, matched_keywords, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      randomId(), user.id, userMsgId, crisis_level, JSON.stringify(matched), t,
+    );
+  }
+  if (!ephemeral) {
+    await maybeRecordMoment(env, { userId: user.id, messageId: userMsgId, content: text, crisis_level });
+  }
+
+  const assistantMsgId = randomId();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const enc = new TextEncoder();
+      const send = (event, data) => {
+        controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      };
+
+      send('meta', {
+        conversationId,
+        userMessage: { id: userMsgId, role: 'user', content: text, created_at: t, crisis_level: effectiveCrisis },
+        assistantMessageId: assistantMsgId,
+      });
+
+      let fullText = '';
+      let llmError = null;
+      try {
+        const history = await loadRecentContext(env, conversationId, CONTEXT_WINDOW);
+        const memoryCtx = ephemeral ? '' : await buildMemoryContext(env, user.id);
+        const daysAway = await getDaysSinceLastSeen(env, user.id);
+        const systemPrompt = buildSystemPrompt({
+          crisisLevel: crisis_level,
+          memoryContext: memoryCtx,
+          addressAs: user.address_as,
+          nickname: user.nickname,
+          toneStyle: user.tone_style || 'warm',
+          daysAway,
+        });
+        const messages = [{ role: 'system', content: systemPrompt }, ...history];
+
+        for await (const delta of callChatStream(env, user.id, messages)) {
+          fullText += delta;
+          send('chunk', { delta });
+        }
+      } catch (e) {
+        llmError = e?.message || String(e);
+        // 降级：本地 mock 一次性吐出
+        const fallback = mockReply(text, crisis_level);
+        fullText = fallback;
+        send('chunk', { delta: fallback });
+      }
+
+      // 入库 + 更新最后活跃
+      try {
+        await d.run(
+          'INSERT INTO messages (id, conversation_id, user_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          assistantMsgId, conversationId, user.id, 'assistant', fullText || '（…）', now(),
+        );
+        await d.run('UPDATE conversations SET last_msg_at = ? WHERE id = ?', now(), conversationId);
+        await updateLastSeen(env, user.id);
+      } catch (e) {
+        llmError = llmError || e?.message || 'save_failed';
+      }
+
+      // 检查里程碑（便宜，同步）
+      let milestones = [];
+      if (!ephemeral) {
+        try { milestones = await checkMilestones(env, user.id); } catch (e) { console.error(e); }
+      }
+
+      send('done', { fullText, llmError, milestones });
+
+      // 在流关闭前跑 LLM 综合评估（不 await 也能跑，但流关闭后可能被 Worker 回收）
+      // 用户此时已读到 done，再多等 1-3s 不影响体验
+      if (!ephemeral) {
+        try { await maybeRunLLMAssessment(env, user.id); } catch (e) { console.error(e); }
+      }
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+    },
+  });
 }
