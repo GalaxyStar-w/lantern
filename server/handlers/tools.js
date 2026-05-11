@@ -3,7 +3,7 @@
 
 import { db, now, randomId } from '../d1.js';
 import { json } from '../utils.js';
-import { callChat } from '../llm.js';
+import { callChat, callChatStream } from '../llm.js';
 
 const DECOUPLE_SYSTEM = `你在帮一个正在焦虑的人做"课题分离"（阿德勒心理学方法），缓解 ta 的焦虑。
 
@@ -37,13 +37,40 @@ export async function handleDecouple(request, env, user) {
     ...messages,
   ];
 
+  let reply = '';
+  let lastErr = null;
+
+  // 先用流式聚合（和主聊天同一路径，已验证）
   try {
-    const reply = await callChat(env, user.id, llmMessages, { maxTokens: 200 });
-    return json({ reply, step, finished: step >= 4 });
+    for await (const delta of callChatStream(env, user.id, llmMessages, { maxTokens: 300 })) {
+      reply += delta;
+    }
   } catch (e) {
-    console.error('decouple callChat failed:', e?.message, e?.stack);
-    return json({ error: (e && e.message) || '暂时说不出话', reply: null }, 503);
+    lastErr = e?.message || String(e);
+    console.error('decouple stream failed:', lastErr);
   }
+
+  // 流式空 → 非流式兜底
+  if (!reply.trim()) {
+    try {
+      const full = await callChat(env, user.id, llmMessages, { maxTokens: 300 });
+      if (full && full.trim()) reply = full;
+    } catch (e) {
+      lastErr = e?.message || String(e);
+      console.error('decouple callChat fallback failed:', lastErr);
+    }
+  }
+
+  if (!reply.trim()) {
+    return json({
+      reply: null,
+      error: lastErr || 'LLM 没有返回内容',
+      step,
+      finished: false,
+    });
+  }
+
+  return json({ reply: reply.trim(), step, finished: step >= 4 });
 }
 
 // 给未来的自己写信

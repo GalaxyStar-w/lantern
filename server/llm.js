@@ -67,9 +67,18 @@ export async function callChat(env, userId, messages, { temperature = 0.4, maxTo
     throw new Error(`LLM_HTTP_${res.status}: ${body.slice(0, 200)}`);
   }
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('LLM_EMPTY_RESPONSE');
-  return content.trim();
+  // 兼容多个字段：choices[0].message.content / choices[0].text / content / output_text
+  const content =
+    data?.choices?.[0]?.message?.content ??
+    data?.choices?.[0]?.text ??
+    data?.content ??
+    data?.output_text ??
+    '';
+  if (!content || !String(content).trim()) {
+    // 返回空串而不是抛错，让调用方自己决定兜底策略
+    return '';
+  }
+  return String(content).trim();
 }
 
 /**

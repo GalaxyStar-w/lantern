@@ -122,6 +122,10 @@ export async function handleChat(request, env, user) {
     });
     const messages = [{ role: 'system', content: systemPrompt }, ...history];
     reply = await callChat(env, user.id, messages);
+    if (!reply) {
+      llmError = 'empty_response';
+      reply = mockReply(text, crisis_level);
+    }
   } catch (e) {
     llmError = e?.message || String(e);
     reply = mockReply(text, crisis_level);
